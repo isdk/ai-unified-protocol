@@ -15,7 +15,7 @@ refs
 *.local
 .cache
 .nyc_output/
-docs/
+/docs/
 dev.md
 *.db
 .npmrc
