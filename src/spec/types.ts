@@ -455,9 +455,26 @@ export type ProviderConfig = LocalProviderConfig | RemoteProviderConfig
 
 export interface RemoteProviderConfig {
   type: 'remote'
+
+  /**
+   * Final service provider API URL.
+   * This is the endpoint of the actual AI service (e.g., OpenAI API).
+   */
   apiUrl: string
+
+  /** Authentication key for the provider */
   apiKey?: string
+
+  /** Custom HTTP headers or transport-level metadata */
   headers?: Record<string, string>
+
+  /**
+   * Transport-level URL for the provider connection.
+   * Format: protocol://endpoint
+   * Example: 'rpc+http://api.example.com/v1'
+   * The protocol part (e.g., 'rpc+http') represents the transport implementation.
+   */
+  transportUrl?: string
 }
 
 export interface LocalProviderConfig {

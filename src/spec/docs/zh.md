@@ -40,20 +40,43 @@
 ├──────────────────────────────────────────────┤
 │           路由器 / 编排器 (Router)             │  URI 解析，提供者
 │      (provider://model routing)              │  匹配，优先级
-├──────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────────────┐    │
-│  │   Local     │  │      Remote         │    │  提供者适配器
-│  │  Provider   │  │     Provider        │    │
-│  └──────┬──────┘  └─────────────────────┘    │
-│     ┌───┴───┬──────────┐                     │
-│     │llama  │whisper   │sd.cpp               │  本地引擎
-│     │.cpp   │.cpp      │                     │
-│     └───────┴──────────┘                     │
+├───────────────────┬──────────────────────────┤
+│      Local        │      Remote              │  提供者适配器
+│     Provider      │     Provider             │
+├───────────┬───────┴──────────────────────────┤
+│    Native │      传输适配层 (Transport)        │
+│           │ (tool-rpc, tool-event, fetch)    │
+├─────────┬─┴──────────────────────────────────┤
+│     ┌───┴───┬──────────┬───────┐             │
+│     │llama  │whisper   │sd.cpp │             │  本地引擎
+│     │.cpp   │.cpp      │       │             │
+│     └───────┴──────────┴───────┘             │
 ├──────────────────────────────────────────────┤
 │          协议层 (Protocol Layer)              │  ContentBlock, Request,
 │   Modality, Capability, Message, Error, ...  │  Response, Provider interface
 └──────────────────────────────────────────────┘
 ```
+
+## 传输层解耦 (Transport Agnostic)
+<!-- id: overview-transport -->
+
+本协议在设计上与传输层完全解耦。协议层仅定义数据的 **语义结构**，而数据的 **搬运方式** 由具体的 Provider 实现。
+
+- **逻辑边界**：`AIProvider.invoke` 是协议的终点。
+- **传输实现**：Remote Provider 可以通过任何协议（HTTP, WebSocket, gRPC, IPC, 或 `@isdk/tool-rpc`）与远程服务通信。
+- **异步模型**：流式数据通过 `AsyncIterable` 承载，这消除了对显式 `subscribe/unsubscribe` 接口的需求——迭代器的生命周期即订阅周期。
+
+## URI 寻址约定
+<!-- id: overview-uri -->
+
+系统使用简练的 URI 格式进行模型和端点的定位：
+
+- **模型定位 (Application Level)**: `[provider]://[model-name]`
+  - `local://qwen-7b-instruct`
+  - `openai://gpt-4o`
+- **传输定位 (Transport Level)**: `[protocol]+[transport]://[endpoint]`
+  - `rpc+http://api.example.com/v1`
+  - `event+ws://localhost:8080/events`
 
 # 🧩 模态与能力
 <!-- id: modality -->

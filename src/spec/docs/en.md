@@ -40,20 +40,43 @@ The system is organized into clear layers with strict boundaries:
 ├──────────────────────────────────────────────┤
 │           Router / Orchestrator              │  URI resolution, provider
 │      (provider://model routing)              │  matching, priority
-├──────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────────────┐    │
-│  │   Local     │  │      Remote         │    │  Provider adapters
-│  │  Provider   │  │     Provider        │    │
-│  └──────┬──────┘  └─────────────────────┘    │
-│     ┌───┴───┬──────────┐                     │
-│     │llama  │whisper   │sd.cpp               │  Local engines
-│     │.cpp   │.cpp      │                     │
-│     └───────┴──────────┘                     │
+├───────────────────┬──────────────────────────┤
+│      Local        │      Remote              │  Provider adapter
+│     Provider      │     Provider             │
+├───────────┬───────┴──────────────────────────┤
+│    Native │         Transport                │
+│           │ (tool-rpc, tool-event, fetch)    │
+├─────────┬─┴──────────────────────────────────┤
+│     ┌───┴───┬──────────┬───────┐             │
+│     │llama  │whisper   │sd.cpp │             │  Local engines
+│     │.cpp   │.cpp      │       │             │
+│     └───────┴──────────┴───────┘             │
 ├──────────────────────────────────────────────┤
 │          Protocol Layer  (this spec)         │  ContentBlock, Request,
 │   Modality, Capability, Message, Error, ...  │  Response, Provider interface
 └──────────────────────────────────────────────┘
 ```
+
+## Transport Layer Decoupling (Transport Agnostic)
+<!-- id: overview-transport -->
+
+This protocol is designed to be completely decoupled from the transport layer. The protocol layer only defines the **semantic structure** of data, while the **method of transport** is implemented by the specific Provider.
+
+- **Logical Boundary**: `AIProvider.invoke` is the end of the protocol.
+- **Transport Implementation**: Remote Providers can communicate with remote services via any protocol (HTTP, WebSocket, gRPC, IPC, or `@isdk/tool-rpc`).
+- **Asynchronous Model**: Streaming data is carried via `AsyncIterable`, which eliminates the need for explicit `subscribe/unsubscribe` interfaces — the iterator's lifecycle is the subscription cycle.
+
+## URI Addressing Conventions
+<!-- id: overview-uri -->
+
+The system uses concise URI formats for model and endpoint positioning:
+
+- **Model Positioning (Application Level)**: `[provider]://[model-name]`
+  - `local://qwen-7b-instruct`
+  - `openai://gpt-4o`
+- **Transport Positioning (Transport Level)**: `[protocol]+[transport]://[endpoint]`
+  - `rpc+http://api.example.com/v1`
+  - `event+ws://localhost:8080/events`
 
 # 🧩 Modality & Capability
 <!-- id: modality -->
