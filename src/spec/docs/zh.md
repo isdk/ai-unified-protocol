@@ -227,25 +227,74 @@ interface EmbeddingContent {
 
 `thinking` 内容类型代表思维链 (CoT) 推理输出。不同的模型在原始输出中使用不同的标记模式。
 
-**协议层**: 仅将 `thinking` 定义为标准 ContentBlock 类型。
+**协议层**: 将 `thinking` 定义为标准 ContentBlock 类型，并在 `AIRequest` 中提供 `shouldThink` 参数进行控制。
 
-**提供者/引擎层**: 负责解析原始模型输出并将思考与内容分离。思考标记模式在模型配置文件中配置：
+**思维模式配置 (shouldThink)**:
 
-```yaml
-# 模型配置示例 (Qwen3)
-shouldThink:
-  thinkTag: ["<think>", "</think>"]
+`shouldThink` 决定是否启用思维模式及其配置。它可以出现在用户请求参数中，也可以在模型配置文件中定义。
 
-# DeepSeek-R1 使用相同的标签
-shouldThink:
-  thinkTag: ["<think>", "</think>"]
+* **合并优先级**:
+  * **模式切换 (Mode)**: 用户请求参数优先。用户可以选择模型支持的任一模式。
+  * **解析结构 (Tags/Prompts)**: 模型配置文件优先。标签和分隔符由模型本质决定，通常不随请求更改。
+* **能力校验**:
+  * 用户请求的模式必须包含在模型的 `supports.thinkMode` 声明中。如果模型未声明，则仅支持配置中定义的默认模式。
+* **类型**: `boolean | ThinkingMode | ThinkingConfig`
+* **值说明**:
+  * `true`: 启用模型定义的默认模式（或 `last`）。
+  * `false` 或 `'off'`: 禁用思维模式。
+  * `ThinkingMode`: 明确指定模式。
+  * `ThinkingConfig`: 提供增强配置（主要用于模型定义层）。
 
-# Qwen-S1 使用不同的分隔符
-shouldThink:
-  mode: deep
-  thinkTag: "think\\n"
-  answerTag: "\\nanswer\\n"
+**预定义思维模式 (ThinkingMode)**:
+
+| 模式 | 描述 |
+| :--- | :--- |
+| `off` | 禁用思维过程。 |
+| `last` | 先输出最终回答，再输出思考过程。 |
+| `first` | 先输出思考过程，再输出最终回答。 |
+| `deep` | 深度思考模式，通常在得出最终结论前进行长序列推理。 |
+
+**配置对象 (ThinkingConfig)**:
+
+```typescript
+interface ThinkingConfig {
+  mode: ThinkingMode            // 必选：思维模式类型
+  visible?: boolean             // 是否在 UI 中展示思维过程
+  depth?: number                // 最大思考深度
+  steps?: number                // 最大思考步骤
+  /**
+   * 思考内容的标签/分隔符。
+   * 如果是数组 [start, end]，表示成对标签。
+   * 如果是 RegExp，则通过捕获组（如 (?<think>...)）提取内容。
+   */
+  thinkTag?: string | RegExp | [string, string]
+  /**
+   * 回答内容的标签/分隔符。
+   * 对于仅使用单一分隔符的模型，通常用于标记思考的结束和答案的开始。
+   */
+  answerTag?: string | RegExp | [string, string]
+  skipDefaultPrompt?: boolean    // 是否跳过预设的 AI 思考指令
+  defaultThinkPrompt?: {         // 自定义思考指令
+    prompt: {
+      lastThinkPrompt?: any
+      firstThinkPrompt?: any
+      deepThinkPrompt?: any
+      rolePrompt?: any
+    }
+    templateFormat?: string     // 模板格式
+  }
+}
 ```
+
+### 决策：基于模式的状态解析
+
+当模型支持多模式切换且使用非对称分隔符（无明确开始标签，仅有中间分隔符）时，提供者（Provider）必须根据 `AIRequest.shouldThink` 的当前模式动态决定解析状态：
+
+1. **上下文感知**：解析器在处理原始流之前，必须先读取当前的思考模式。
+2. **状态初始化**：
+   - 若模式为 `deep` 或 `first` 且 `thinkTag` 为空/未定义，解析器初始状态设为 `THINKING`。
+   - 若模式为 `off`，解析器初始状态设为 `NORMAL`。
+3. **分界处理**：在 `THINKING` 状态下，一旦匹配到 `answerTag`，即便没有遇到 `thinkTag` 的闭合，也必须立即结束思考块并切换到正文块。
 
 ### 备注
 - 提供者使用状态机解析原始流：NORMAL → 遇到开始标签 → THINKING → 遇到结束标签 → NORMAL
@@ -347,6 +396,9 @@ interface AIRequest {
   // ── 输入 (互斥) ──
   messages?: Message[]                // 对话式
   input?: string | ContentBlock[]     // 非对话式
+
+  // ── 思考控制 ──
+  shouldThink?: boolean | ThinkingMode | ThinkingConfig
 
   // ── 工具调用 (仅对 messages 有意义) ──
   tools?: ToolDefinition[]

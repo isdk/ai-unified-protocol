@@ -138,22 +138,27 @@ function parseSubsection(title: string, lines: string[]): SpecSubsection {
   let decisionIdx = -1
   let noteIdx = -1
 
-  for (let k = 0; k < subLines.length; k++) {
-    const t = subLines[k].trim()
-    if (t === '### Decisions' || t === '### 决策') decisionIdx = k
-    if (t === '### Notes' || t === '### 备注') noteIdx = k
-  }
+  const decisionRegex = /###\s*(决策|Decision)/i
+  const noteRegex = /###\s*(备注|Notes?)/i
 
-  const extractList = (raw: string[]) => raw
-    .filter(l => l.trim().startsWith('-'))
-    .map(l => l.trim().replace(/^-\s*/, ''))
+  decisionIdx = subLines.findIndex(l => decisionRegex.test(l.trim()))
+  noteIdx = subLines.findIndex(l => noteRegex.test(l.trim()))
+
+  const extractBlock = (raw: string[]) => {
+    if (raw.length === 0) return []
+    // Just join the lines to maintain full markdown structure
+    // We return as a single index array to maintain compatibility with the UI mapper,
+    // but the UI will render it as a single markdown block.
+    const content = raw.join('\n').trim()
+    return content ? [content] : []
+  }
 
   // Extract Notes
   if (noteIdx !== -1) {
     let end = subLines.length
     if (decisionIdx > noteIdx) end = decisionIdx // Notes before Decisions
 
-    notes.push(...extractList(subLines.slice(noteIdx + 1, end)))
+    notes.push(...extractBlock(subLines.slice(noteIdx + 1, end)))
     for (let k = noteIdx; k < end; k++) subLines[k] = ''
   }
 
@@ -162,7 +167,7 @@ function parseSubsection(title: string, lines: string[]): SpecSubsection {
     let end = subLines.length
     if (noteIdx > decisionIdx) end = noteIdx // Decisions before Notes
 
-    decisions.push(...extractList(subLines.slice(decisionIdx + 1, end)))
+    decisions.push(...extractBlock(subLines.slice(decisionIdx + 1, end)))
     for (let k = decisionIdx; k < end; k++) subLines[k] = ''
   }
 

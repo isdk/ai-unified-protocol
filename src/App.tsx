@@ -3,6 +3,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { specSectionsEn, specSectionsZh } from './spec/sections'
 import { ui as uiData, typeIndexData, errorCodesData } from './spec/static-data'
 import type { SpecSection, SpecSubsection } from './spec/sections'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 // ─── Sidebar Navigation ──────────────────────────────────────────────────────
 
@@ -124,170 +126,122 @@ function CodeBlock({ code, className, ui }: { code: string; className?: string; 
   )
 }
 
+// ───  Markdown Renderer ───────────────────────────────────────────────────────
+
+function MarkdownRenderer({ content, className = '' }: { content: string; className?: string }) {
+  return (
+    <div className={`prose-custom max-w-none ${className}`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
+          ul: ({ children }) => <ul className="mb-4 ml-6 list-disc space-y-1.5 marker:text-slate-400">{children}</ul>,
+          ol: ({ children }) => <ol className="mb-4 ml-6 list-decimal space-y-1.5 marker:text-slate-400 marker:font-mono marker:text-[10px]">{children}</ol>,
+          li: ({ children }) => <li className="pl-1 text-inherit">{children}</li>,
+          code: (props: any) => {
+            const { children, className, node, ...rest } = props
+            const isBlock = /language-(\w+)/.test(className || '') || (node?.position?.start.line !== node?.position?.end.line)
+
+            if (!isBlock) {
+              return (
+                <code className="mx-0.5 rounded-md bg-slate-100/80 px-1.5 py-0.5 text-[0.8125rem] font-medium text-indigo-700 border border-slate-200/50" {...rest}>
+                  {children}
+                </code>
+              )
+            }
+            return (
+              <pre className="my-4 overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-slate-300">
+                <code className={className}>{children}</code>
+              </pre>
+            )
+          },
+          strong: ({ children }) => <strong className="font-bold text-slate-900">{children}</strong>,
+          em: ({ children }) => <em className="italic text-slate-800">{children}</em>,
+          blockquote: ({ children }) => (
+            <blockquote className="my-4 border-l-4 border-slate-200 pl-4 py-1 italic text-slate-600 bg-slate-50/50 rounded-r-md">
+              {children}
+            </blockquote>
+          ),
+          table: ({ children }) => (
+            <div className="my-6 overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-sm text-left">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">{children}</thead>,
+          th: ({ children }) => <th className="px-4 py-2 font-semibold uppercase text-[10px] tracking-wider">{children}</th>,
+          td: ({ children }) => <td className="px-4 py-2 border-b border-slate-100 last:border-0">{children}</td>,
+          a: ({ href, children }) => (
+            <a href={href} className="text-indigo-600 hover:text-indigo-500 underline underline-offset-4 decoration-indigo-200" target="_blank" rel="noopener">
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 // ─── Content Subsection ──────────────────────────────────────────────────────
 
 function SubsectionView({
   subsection,
-  sectionTitle,
   ui,
 }: {
   subsection: SpecSubsection
-  sectionTitle: string
   ui: any
 }) {
   return (
     <section id={subsection.id} className="scroll-mt-20">
-      <div className="mb-2">
-        <span className="text-xs font-medium tracking-wider text-indigo-500 uppercase">
-          {sectionTitle}
-        </span>
-      </div>
       <h2 className="mb-4 text-2xl font-bold tracking-tight text-slate-900">
         {subsection.title}
       </h2>
 
       {subsection.content && (
-        <div className="prose-custom mb-6">
-          <MarkdownLite text={subsection.content} />
+        <div className="mb-6">
+          <MarkdownRenderer content={subsection.content} />
         </div>
       )}
 
       {subsection.code && <CodeBlock code={subsection.code} className="mb-6" ui={ui} />}
 
       {subsection.decisions && subsection.decisions.length > 0 && (
-        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/50 p-5">
-          <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-emerald-800">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-xs">
+        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
+          <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-emerald-800 uppercase tracking-wider">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[10px]">
               ✓
             </span>
             {ui.designDecisions}
           </h4>
-          <ul className="space-y-2">
+          <div className="space-y-4">
             {subsection.decisions.map((d, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-emerald-900">
-                <span className="mt-1 block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
-                <InlineMarkdown text={d} />
-              </li>
+              <div key={i} className="text-emerald-900 prose-compact prose-emerald">
+                <MarkdownRenderer content={d} />
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       {subsection.notes && subsection.notes.length > 0 && (
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/50 p-5">
-          <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-800">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-200 text-xs">
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
+          <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-amber-800 uppercase tracking-wider">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-200 text-[10px]">
               !
             </span>
             {ui.notes}
           </h4>
-          <ul className="space-y-2">
+          <div className="space-y-4">
             {subsection.notes.map((n, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-amber-900">
-                <span className="mt-1 block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-                <InlineMarkdown text={n} />
-              </li>
+              <div key={i} className="text-amber-900 prose-compact prose-amber">
+                <MarkdownRenderer content={n} />
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
     </section>
-  )
-}
-
-// ─── Minimal markdown renderer ───────────────────────────────────────────────
-
-function MarkdownLite({ text }: { text: string }) {
-  const paragraphs = text.split('\n\n')
-
-  return (
-    <div className="space-y-3 text-[0.9375rem] leading-relaxed text-slate-700">
-      {paragraphs.map((p, i) => {
-        const trimmed = p.trim()
-        if (!trimmed) return null
-
-        if (trimmed.startsWith('- ')) {
-          const items = trimmed.split('\n').filter(l => l.trim().startsWith('- '))
-          return (
-            <ul key={i} className="ml-4 list-disc space-y-1 marker:text-slate-400">
-              {items.map((item, j) => (
-                <li key={j}>
-                  <InlineMarkdown text={item.replace(/^-\s*/, '')} />
-                </li>
-              ))}
-            </ul>
-          )
-        }
-
-        return (
-          <p key={i}>
-            <InlineMarkdown text={trimmed} />
-          </p>
-        )
-      })}
-    </div>
-  )
-}
-
-function InlineMarkdown({ text }: { text: string }) {
-  const parts: (string | { type: 'code' | 'bold'; content: string })[] = []
-  let remaining = text
-
-  while (remaining.length > 0) {
-    const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)$/s)
-    const boldMatch = remaining.match(/^(.*?)\*\*([^*]+)\*\*(.*)$/s)
-
-    let match: RegExpMatchArray | null = null
-    let type: 'code' | 'bold' = 'code'
-
-    if (codeMatch && boldMatch) {
-      if (codeMatch[1].length <= boldMatch[1].length) {
-        match = codeMatch
-        type = 'code'
-      } else {
-        match = boldMatch
-        type = 'bold'
-      }
-    } else if (codeMatch) {
-      match = codeMatch
-      type = 'code'
-    } else if (boldMatch) {
-      match = boldMatch
-      type = 'bold'
-    }
-
-    if (match) {
-      if (match[1]) parts.push(match[1])
-      parts.push({ type, content: match[2] })
-      remaining = match[3]
-    } else {
-      parts.push(remaining)
-      break
-    }
-  }
-
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (typeof part === 'string') return <span key={i}>{part}</span>
-        if (part.type === 'code')
-          return (
-            <code
-              key={i}
-              className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[0.8125rem] font-medium text-indigo-700"
-            >
-              {part.content}
-            </code>
-          )
-        if (part.type === 'bold')
-          return (
-            <strong key={i} className="font-bold text-slate-900">
-              {part.content}
-            </strong>
-          )
-        return null
-      })}
-    </>
   )
 }
 
@@ -592,10 +546,6 @@ export function App() {
   // Initialization check to avoid empty activeId
   useEffect(() => {
     if (currentSections.length > 0 && currentSections[0].subsections.length > 0) {
-      // Keep existing activeId if valid, else set default
-      // Or just set it if empty.
-      // But activeId might be set by scroll observer.
-      // Let's set default if initial.
       if (!activeId) setActiveId(currentSections[0].subsections[0].id)
     }
   }, [currentSections, activeId])
@@ -817,7 +767,6 @@ export function App() {
                     <SubsectionView
                       key={sub.id}
                       subsection={sub}
-                      sectionTitle={section.title}
                       ui={currentUi}
                     />
                   ))}

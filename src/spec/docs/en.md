@@ -224,27 +224,76 @@ interface EmbeddingContent {
 ## Thinking Content
 <!-- id: content-thinking -->
 
-The \`thinking\` content type represents Chain-of-Thought (CoT) reasoning output. Different models use different marker patterns in their raw output.
+The `thinking` content type represents Chain-of-Thought (CoT) reasoning output. Different models use different marker patterns in their raw output.
 
-**Protocol layer**: Only defines \`thinking\` as a standard ContentBlock type.
+**Protocol layer**: Defines `thinking` as a standard ContentBlock type and provides the `shouldThink` parameter in `AIRequest` for control.
 
-**Provider/Engine layer**: Responsible for parsing raw model output and splitting thinking from content. The thinking marker patterns are configured in the model configuration file:
+**Thinking Mode Configuration (shouldThink)**:
 
-```yaml
-# Model config example (Qwen3)
-shouldThink:
-  thinkTag: ["<think>", "</think>"]
+`shouldThink` determines whether to enable thinking mode and its configuration. It can appear in user request parameters or be defined in the model configuration file.
 
-# DeepSeek-R1 uses the same tags
-shouldThink:
-  thinkTag: ["<think>", "</think>"]
+* **Merge Priority**:
+  * **Mode Switch (Mode)**: User request parameters take priority. Users can choose any mode supported by the model.
+  * **Parsing Structure (Tags/Prompts)**: Model configuration takes priority. Tags and delimiters are determined by the model's nature and typically do not change per request.
+* **Capability Verification**:
+  * The requested mode must be included in the model's `supports.thinkMode` declaration. If not declared, only the default mode defined in the config is supported.
+* **Type**: `boolean | ThinkingMode | ThinkingConfig`
+* **Values**:
+  * `true`: Enables the model's default mode (or `last`).
+  * `false` or `'off'`: Disables thinking mode.
+  * `ThinkingMode`: Explicitly specifies a mode.
+  * `ThinkingConfig`: Provides enhanced configuration (primarily used at the model definition level).
 
-# Qwen-S1 uses different delimiters
-shouldThink:
-  mode: deep
-  thinkTag: "think\\n"
-  answerTag: "\\nanswer\\n"
+**Predefined Thinking Modes (ThinkingMode)**:
+
+| Mode | Description |
+| :--- | :--- |
+| `off` | Disables the thinking process. |
+| `last` | Outputs the final answer first, followed by the thinking process. |
+| `first` | Outputs the thinking process first, followed by the final answer. |
+| `deep` | Deep thinking mode, typically involving long-sequence reasoning before reaching a conclusion. |
+
+**Configuration Object (ThinkingConfig)**:
+
+```typescript
+interface ThinkingConfig {
+  mode: ThinkingMode            // Required: Thinking mode type
+  visible?: boolean             // Whether to display the thinking process in the UI
+  depth?: number                // Maximum thinking depth
+  steps?: number                // Maximum thinking steps
+  /**
+   * Tags/delimiters for thinking content.
+   * If an array [start, end], represents paired tags.
+   * If RegExp, extracts content via capture groups (e.g., (?<think>...)).
+   */
+  thinkTag?: string | RegExp | [string, string]
+  /**
+   * Tags/delimiters for answer content.
+   * For models using a single delimiter, typically marks the end of thinking and the start of the answer.
+   */
+  answerTag?: string | RegExp | [string, string]
+  skipDefaultPrompt?: boolean    // Whether to skip preset AI thinking instructions
+  defaultThinkPrompt?: {         // Custom thinking instructions
+    prompt: {
+      lastThinkPrompt?: any
+      firstThinkPrompt?: any
+      deepThinkPrompt?: any
+      rolePrompt?: any
+    }
+    templateFormat?: string     // Template format
+  }
+}
 ```
+
+### Decision: Mode-Aware State Parsing
+
+When a model supports multi-mode switching and uses asymmetric delimiters (no explicit start tag, only a middle separator), the Provider must dynamically decide the parsing state based on the current `AIRequest.shouldThink` mode:
+
+1. **Context Awareness**: The parser must read the current thinking mode before processing the raw stream.
+2. **State Initialization**:
+   - If mode is `deep` or `first` and `thinkTag` is empty/undefined, the initial state is set to `THINKING`.
+   - If mode is `off`, the initial state is set to `NORMAL`.
+3. **Boundary Handling**: In `THINKING` state, once an `answerTag` is matched, the thinking block must be immediately terminated and switched to the body block, even if no closing `thinkTag` was encountered.
 
 ### Notes
 - Provider parses raw stream using a state machine: NORMAL → encounter start tag → THINKING → encounter end tag → NORMAL
@@ -354,6 +403,9 @@ interface AIRequest {
   // ── Input (mutually exclusive) ──
   messages?: Message[]                // Conversational
   input?: string | ContentBlock[]     // Non-conversational
+
+  // ── Thinking Control ──
+  shouldThink?: boolean | ThinkingMode | ThinkingConfig
 
   // ── Tool calling (meaningful with messages only) ──
   tools?: ToolDefinition[]
