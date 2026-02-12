@@ -133,7 +133,7 @@ matchesAlias(model, 'chat', { requireFeatures: ['multi_turn'] })
 ```
 
 ### 决策
-- 仅支持补全的 text→text 模型**是** "chat" 类型（匹配模态），但缺少 multi_turn 特性
+- 仅支持补全的 text→text 模型 **是** "chat" 类型（匹配模态），但缺少 multi_turn 特性
 - GPT-4o 同时匹配 "chat" 和 "vision" 别名（超集匹配）
 - 应用层分别检查特性以确定 UI 展示
 
@@ -146,6 +146,7 @@ matchesAlias(model, 'chat', { requireFeatures: ['multi_turn'] })
 所有输入和输出数据都流经 **ContentBlock** —— 一个带有 `type` 判别式的标记联合体。`type` 字段是 `string`（不是枚举），以允许提供者扩展。
 
 内容可以以两种形式出现：
+
 - **字符串简写**: `"Hello world"` —— 视为 `[{ type: 'text', text: 'Hello world' }]`
 - **ContentBlock 数组**: `[{ type: 'text', text: '...' }, { type: 'image', url: '...' }]`
 

@@ -41,10 +41,10 @@ The system is organized into clear layers with strict boundaries:
 │           Router / Orchestrator              │  URI resolution, provider
 │      (provider://model routing)              │  matching, priority
 ├──────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────────────┐   │
-│  │   Local      │  │      Remote         │   │  Provider adapters
-│  │  Provider    │  │     Provider        │   │
-│  └──────┬──────┘  └─────────────────────┘   │
+│  ┌─────────────┐  ┌─────────────────────┐    │
+│  │   Local     │  │      Remote         │    │  Provider adapters
+│  │  Provider   │  │     Provider        │    │
+│  └──────┬──────┘  └─────────────────────┘    │
 │     ┌───┴───┬──────────┐                     │
 │     │llama  │whisper   │sd.cpp               │  Local engines
 │     │.cpp   │.cpp      │                     │

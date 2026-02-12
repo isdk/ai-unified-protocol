@@ -57,8 +57,8 @@ function Sidebar({
                     onClose()
                   }}
                   className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-semibold transition-colors ${section.subsections.some(s => s.id === activeId)
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-slate-700 hover:bg-slate-100'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-slate-700 hover:bg-slate-100'
                     }`}
                 >
                   <span className="text-base">{section.icon}</span>
@@ -73,8 +73,8 @@ function Sidebar({
                         onClose()
                       }}
                       className={`block w-full rounded-md px-3 py-1.5 text-left text-xs transition-colors ${activeId === sub.id
-                          ? 'bg-indigo-100/80 font-medium text-indigo-700'
-                          : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                        ? 'bg-indigo-100/80 font-medium text-indigo-700'
+                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
                         }`}
                     >
                       {sub.title}
@@ -166,7 +166,7 @@ function SubsectionView({
             {subsection.decisions.map((d, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-emerald-900">
                 <span className="mt-1 block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
-                {d}
+                <InlineMarkdown text={d} />
               </li>
             ))}
           </ul>
@@ -185,7 +185,7 @@ function SubsectionView({
             {subsection.notes.map((n, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-amber-900">
                 <span className="mt-1 block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-                {n}
+                <InlineMarkdown text={n} />
               </li>
             ))}
           </ul>
@@ -281,7 +281,7 @@ function InlineMarkdown({ text }: { text: string }) {
           )
         if (part.type === 'bold')
           return (
-            <strong key={i} className="font-semibold text-slate-900">
+            <strong key={i} className="font-bold text-slate-900">
               {part.content}
             </strong>
           )
@@ -446,8 +446,8 @@ function ErrorCodeTable({ ui, lang }: { ui: any; lang: 'en' | 'zh' }) {
               <td className="px-4 py-2.5">
                 <code
                   className={`rounded-md px-2 py-0.5 text-xs font-bold ${e.http
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'bg-purple-50 text-purple-700'
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'bg-purple-50 text-purple-700'
                     }`}
                 >
                   {e.code}
@@ -460,8 +460,8 @@ function ErrorCodeTable({ ui, lang }: { ui: any; lang: 'en' | 'zh' }) {
               <td className="px-4 py-2.5">
                 <span
                   className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${e.http
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-purple-100 text-purple-700'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-purple-100 text-purple-700'
                     }`}
                 >
                   {e.http ? ui.errorOrigin.http : ui.errorOrigin.ai}

@@ -140,7 +140,7 @@ function parseSubsection(title: string, lines: string[]): SpecSubsection {
 
   for (let k = 0; k < subLines.length; k++) {
     const t = subLines[k].trim()
-    if (t === '### Decisions') decisionIdx = k
+    if (t === '### Decisions' || t === '### 决策') decisionIdx = k
     if (t === '### Notes' || t === '### 备注') noteIdx = k
   }
 
