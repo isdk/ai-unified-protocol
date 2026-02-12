@@ -641,24 +641,36 @@ interface LocalProviderConfig {
 - Unknown parameters are silently ignored by the provider
 - No whitelist/blacklist enforcement at protocol level
 
+## Model Configuration Resolution
+<!-- id: provider-config-resolution -->
+
+When loading a model, local providers retrieve configuration from two primary sources:
+
+1. **Sidecar Configuration**:
+   - **Location**: In the same directory as the model binary file (e.g., `.gguf`).
+   - **Naming**: Shares the same basename with a `.config.yaml` suffix.
+   - **Example**: `model.gguf` matches `model.config.yaml`.
+   - **Role**: Used for fine-tuning specific model files or storing user-defined overrides.
+
+2. **System Built-in Configuration**:
+   - **Location**: The system's internal model configuration library.
+   - **Matching**: Resolved via `modelPattern` regex matching against the filename.
+   - **Role**: Provides recommended defaults for entire model families (e.g., `Llama-3`, `Qwen-2`).
+
 ## Parameter Priority
 <!-- id: provider-params -->
 
 For local providers, parameters are resolved through a priority chain. Higher-priority sources override lower ones:
 
-```typescript
-Request params          (highest priority — user's explicit intent)
-    ↓
-Model config: variant   (e.g., parameters.qwen3.temperature)
-    ↓
-Model config: base      (e.g., parameters.qwen.temperature)
-    ↓
-Engine defaults          (lowest priority)
-```
+1. **Request Options**: Explicit `AIRequest.options` (Highest priority — direct user intent).
+2. **Sidecar Config**: `*.config.yaml` file adjacent to the model binary.
+3. **System Built-in Config**: Predefined recommended settings for the model family.
+4. **Engine Defaults**: Default values of the underlying inference engine (Lowest priority).
 
 ### Notes
-- The protocol layer does not perform this merging — it is the provider/engine\'s responsibility
-- This chain ensures user intent always wins, with sensible defaults when not specified
+- **Internal Configuration Priority**: When resolving a Sidecar or System configuration, an internal hierarchy also applies (from high to low): **Version Variant > Base Config > Inherited Config**.
+- The protocol layer does not perform this merging — it is the provider/engine's responsibility.
+- This chain ensures user intent always wins, with sensible defaults when not specified.
 
 # 🗺️ Routing
 <!-- id: routing -->
@@ -913,8 +925,12 @@ When a model file is loaded, the engine resolves its configuration through a mul
 ```typescript
 Input: model filename "Qwen3-8B-Q4_K_M.gguf"
 
-Step 1: Find matching config
-  → Iterate all configs' modelPattern.'@' (default rules)
+Step 0: Check for Sidecar Config
+  → Check if `Qwen3-8B-Q4_K_M.config.yaml` exists
+  → If present and contains a full definition, it takes precedence; if it only contains parameters, it will be merged with the resolved system config.
+
+Step 1: Find matching config (System Config)
+  → Iterate all built-in configs' modelPattern.'@' (default rules)
   → "Qwen" config matches via /(?:^|[-_.])(?:code)?(qwen)/i
 
 Step 2: Resolve inheritance

@@ -531,7 +531,17 @@ function Arrow() {
 // ─── Main App ────────────────────────────────────────────────────────────────
 
 export function App() {
-  const [lang, setLang] = useState<'en' | 'zh'>('en')
+  const [lang, setLang] = useState<'en' | 'zh'>(() => {
+    const saved = localStorage.getItem('isdk_spec_lang') as 'en' | 'zh'
+    if (saved && (saved === 'en' || saved === 'zh')) return saved
+    return navigator.language.startsWith('zh') ? 'zh' : 'en'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('isdk_spec_lang', lang)
+    document.title = uiData[lang].sidebarTitle
+    document.documentElement.lang = lang
+  }, [lang])
 
   const currentSections = lang === 'en' ? specSectionsEn : specSectionsZh
   const currentUi = uiData[lang]

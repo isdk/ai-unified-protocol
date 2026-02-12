@@ -617,24 +617,36 @@ interface LocalProviderConfig {
 - 未知参数被提供者静默忽略
 - 协议层没有白名单/黑名单强制执行
 
+## 模型配置寻址
+<!-- id: provider-config-resolution -->
+
+本地提供者在加载模型时，会通过以下两种来源获取配置：
+
+1. **伴生配置 (Sidecar Configuration)**:
+   - **位置**: 与模型二进制文件（如 `.gguf`）存放在同一目录。
+   - **命名**: 基础文件名一致，后缀为 `.config.yaml`。
+   - **示例**: `deepseek-v3.gguf` 对应的配置为 `deepseek-v3.config.yaml`。
+   - **特点**: 用于针对特定模型文件进行微调或存放由用户自定义的参数。
+
+2. **系统级内置配置 (System Built-in Configuration)**:
+   - **位置**: 系统内置的模型配置库。
+   - **匹配方式**: 采用 `modelPattern` 正则表达式匹配模型文件名。
+   - **特点**: 为一系列模型族（如 `Llama-3`, `Qwen-2`）提供通用的推荐配置。
+
 ## 参数优先级
 <!-- id: provider-params -->
 
-对于本地提供者，参数通过优先级链解析。高优先级来源覆盖低优先级来源：
+对于本地提供者，参数按照以下优先级由高到低进行叠加解析。高优先级来源完全覆盖低优先级来源的同名参数：
 
-```typescript
-请求参数 (Request params)          (最高优先级 — 用户的显式意图)
-    ↓
-模型配置: 变体 (Model config: variant)   (例如, parameters.qwen3.temperature)
-    ↓
-模型配置: 基础 (Model config: base)      (例如, parameters.qwen.temperature)
-    ↓
-引擎默认值 (Engine defaults)          (最低优先级)
-```
+1. **请求参数 (Request Options)**: 用户在 `AIRequest` 中显式传入的 `options`（最高优先级，直接表达实时意图）。
+2. **伴生配置 (Sidecar Config)**: 模型物理文件旁对应的 `.config.yaml`。
+3. **系统级内置配置 (System Built-in Config)**: 系统内部针对该类模型预设的推荐配置。
+4. **引擎默认值 (Engine Defaults)**: 底层推理引擎（如 `llama.cpp`）自身的缺省值。
 
 ### 备注
-- 协议层不执行此合并——这是提供者/引擎的责任
-- 此链确保用户意图始终获胜，在未指定时使用合理的默认值
+- **配置文件内部优先级**: 在计算伴生配置或系统配置时，其内部也存在层级覆盖（由高到低）：**版本变体 (Variant) > 当前配置基础 (Base) > 继承配置 (Inherited)**。
+- 协议层不执行此合并——这是提供者/引擎的责任。
+- 此链确保用户意图始终获胜，在未指定时使用合理的默认值。
 
 # 🗺️ 路由
 <!-- id: routing -->
@@ -888,8 +900,12 @@ modelPattern:             # ← 自己的模式 (不继承父模式)
 ```text
 输入: 模型文件名 "Qwen3-8B-Q4_K_M.gguf"
 
-步骤 1: 查找匹配配置
-  → 迭代所有配置的 modelPattern.'@' (默认规则)
+步骤 0: 检查伴生配置 (Sidecar Config)
+  → 检查 `Qwen3-8B-Q4_K_M.config.yaml` 是否存在
+  → 若存在且包含完整定义，则优先使用；若仅包含参数，则继续后续步骤进行合并
+
+步骤 1: 查找匹配配置 (System Config)
+  → 迭代所有内置配置的 modelPattern.'@' (默认规则)
   → "Qwen" 配置匹配，通过 /(?:^|[-_.])(?:code)?(qwen)/i
 
 步骤 2: 解析继承
