@@ -474,7 +474,17 @@ export interface RemoteProviderConfig {
    * Example: 'rpc+http://api.example.com/v1'
    * The protocol part (e.g., 'rpc+http') represents the transport implementation.
    */
-  transportUrl?: string
+  transport?: string | {
+    protocol: string
+    host: string
+    port?: string
+    username?: string
+    password?: string
+    pathname?: string
+    search?: string
+    hash?: string
+    [key: string]: any
+  }
 }
 
 export interface LocalProviderConfig {
