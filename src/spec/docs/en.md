@@ -864,7 +864,7 @@ interface LocalModelConfig {
   extends?: string                  // Inherit from parent config
   templateFormat?: string           // 'hf' | 'jinja2' | 'golang'
   type?: string                     // 'system' for base templates
-  supports?: string[]               // Feature declarations
+  supports?: (string | Record<string, any>)[] // Feature declarations
 
   version?: Record<string, {        // Per-variant overrides
     supports?: Record<string, any>[]
@@ -980,8 +980,9 @@ The thinking (CoT) configuration varies significantly across model families. The
 interface ThinkingConfig {
   mode?: string        // 'deep' | 'off' — default behavior
   thinkTag?:
-    | string           // Single delimiter (e.g., "think\\n")
+    | string | RegExp  // Single delimiter (e.g., "think\\n")
     | [string, string] // Start/end pair (e.g., ["<think>", "</think>"])
+  // ...(more)
 }
 
 # Examples from real configs:

@@ -839,7 +839,7 @@ interface LocalModelConfig {
   extends?: string                  // 继承自父配置
   templateFormat?: string           // 'hf' | 'jinja2' | 'golang'
   type?: string                     // 'system' 用于基础模板
-  supports?: string[]               // 特性声明
+  supports?: (string | Record<string, any>)[] // 特性声明
 
   version?: Record<string, {        // 版本变体覆盖
     supports?: Record<string, any>[]
@@ -955,8 +955,9 @@ modelPattern:             # ← 自己的模式 (不继承父模式)
 interface ThinkingConfig {
   mode?: string        // 'deep' | 'off' — 默认行为
   thinkTag?:
-    | string           // 单个分隔符 (例如, "think\\n")
+    | string | RegExp  // 单个分隔符 (例如, "think\\n")
     | [string, string] // 开始/结束对 (例如, ["<think>", "</think>"])
+  // ...(略)
 }
 
 # 来自真实配置的示例:
