@@ -1,8 +1,9 @@
+const ProtocolVersion = '1.0.1'
 
 export const ui = {
   en: {
     sidebarTitle: "AI Unified Protocol",
-    sidebarSubtitle: "Specification v1.0.1",
+    sidebarSubtitle: `Specification V${ProtocolVersion}`,
     sidebarFooter: "Protocol specification for unified AI model interaction across all modalities",
     copy: "Copy",
     copied: "✓ Copied",
@@ -12,7 +13,7 @@ export const ui = {
     aliasMatrixTitle: "Model Type Alias Matrix",
     requestFlowTitle: "Visual: Request Routing Flow",
     errorTableTitle: "Complete Error Code Reference",
-    footerTitle: "AI Unified Protocol Specification v1.0.1 — Draft",
+    footerTitle: `AI Unified Protocol Specification V${ProtocolVersion} — Draft`,
     footerSubtitle: "All decisions confirmed through iterative design review",
     searchPlaceholder: "Search specification... (⌘K)",
     draftLabel: "Specification Draft",
@@ -44,7 +45,7 @@ export const ui = {
   },
   zh: {
     sidebarTitle: "AI 统一协议",
-    sidebarSubtitle: "规范 v1.0.1",
+    sidebarSubtitle: `规范 V${ProtocolVersion}`,
     sidebarFooter: "用于跨所有模态统一 AI 模型交互的协议规范",
     copy: "复制",
     copied: "✓ 已复制",
@@ -54,7 +55,7 @@ export const ui = {
     aliasMatrixTitle: "模型类型别名矩阵",
     requestFlowTitle: "可视化：请求路由流程",
     errorTableTitle: "完整错误代码参考",
-    footerTitle: "AI 统一协议规范 v1.0.1 — 草案",
+    footerTitle: `AI 统一协议规范 V${ProtocolVersion} — 草案`,
     footerSubtitle: "所有决定均通过迭代设计审查确认",
     searchPlaceholder: "搜索规范... (⌘K)",
     draftLabel: "规范草案",
