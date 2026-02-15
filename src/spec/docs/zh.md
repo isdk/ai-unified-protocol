@@ -297,15 +297,6 @@ interface ThinkingConfig {
    */
   answerTag?: string | RegExp | [string, string]
   skipDefaultPrompt?: boolean    // 是否跳过预设的 AI 思考指令
-  defaultThinkPrompt?: {         // 自定义思考指令
-    prompt: {
-      lastThinkPrompt?: any
-      firstThinkPrompt?: any
-      deepThinkPrompt?: any
-      rolePrompt?: any
-    }
-    templateFormat?: string     // 模板格式
-  }
 }
 ```
 

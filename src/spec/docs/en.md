@@ -296,15 +296,6 @@ interface ThinkingConfig {
    */
   answerTag?: string | RegExp | [string, string]
   skipDefaultPrompt?: boolean    // Whether to skip preset AI thinking instructions
-  defaultThinkPrompt?: {         // Custom thinking instructions
-    prompt: {
-      lastThinkPrompt?: any
-      firstThinkPrompt?: any
-      deepThinkPrompt?: any
-      rolePrompt?: any
-    }
-    templateFormat?: string     // Template format
-  }
 }
 ```
 
