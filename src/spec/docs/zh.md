@@ -6,7 +6,10 @@
 
 本规范定义了一个统一的协议，用于通过所有模态（文本、图像、音频、视频和嵌入向量）与 AI 模型进行交互，无论模型是在本地运行还是通过远程 API 运行。
 
+**协议版本**: `1.0.1`
+
 **核心洞察**：每个 AI 模型本质上都是一个 `输入 → 输出` 函数。模型类型（聊天、视觉、TTS、绘画等）之间的所有差异都可以归结为：
+
 - 模型接受什么输入模态
 - 模型产生什么输出模态
 - 它支持什么额外特性（流式传输、多轮对话、工具调用等）
@@ -14,6 +17,7 @@
 通过显式地对这三个维度进行建模，该协议消除了对每种类型单独接口的需求。
 
 ### 决策
+
 - 所有模型类型共享相同的请求/响应协议
 - 差异通过能力声明表达，而不是单独的接口
 - 提供者特定的参数透明地传递——协议不解析它们
@@ -87,10 +91,17 @@
 **模态 (Modality)** 代表可以流入或流出模型的内容类型。该协议定义了五种标准模态：
 
 ```typescript
-type Modality = 'text' | 'image' | 'audio' | 'video' | 'embedding'
+type Modality =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'embedding'
+  | (string & {})     // 允许扩展新的模态 (如 '3d_model', 'midi')
 ```
 
 ### 备注
+
 - 模态描述数据的性质，而不是格式（例如，“image” 涵盖 PNG, JPEG, WebP 等）
 - 随着生态系统的发展，可以添加新的模态（例如，“3d_model”, “midi”）
 
@@ -112,6 +123,7 @@ type Feature =
 ```
 
 ### 备注
+
 - 特性是可扩展的——提供者可以引入自定义特性
 - 特性描述模型**能**做什么，而不是它**必须**做什么
 
@@ -156,6 +168,7 @@ matchesAlias(model, 'chat', { requireFeatures: ['multi_turn'] })
 ```
 
 ### 决策
+
 - 仅支持补全的 text→text 模型 **是** "chat" 类型（匹配模态），但缺少 multi_turn 特性
 - GPT-4o 同时匹配 "chat" 和 "vision" 别名（超集匹配）
 - 应用层分别检查特性以确定 UI 展示
@@ -187,6 +200,7 @@ type ContentBlock =
 ```
 
 ### 决策
+
 - type 是字符串，不是枚举——提供者可以自由扩展
 - 数据可以是内联的 (base64/ArrayBuffer) 或引用的 (URL)
 - 未知块类型应优雅处理（JSON 显示或跳过）
@@ -311,6 +325,7 @@ interface ThinkingConfig {
 3. **分界处理**：在 `THINKING` 状态下，一旦匹配到 `answerTag`，即便没有遇到 `thinkTag` 的闭合，也必须立即结束思考块并切换到正文块。
 
 ### 备注
+
 - 提供者使用状态机解析原始流：NORMAL → 遇到开始标签 → THINKING → 遇到结束标签 → NORMAL
 - 在流式模式下，思考块使用 { type: "thinking", delta: "..." }，内容块使用 { type: "text", delta: "..." }
 - 应用层只看到干净、分离的块——无需解析
@@ -332,7 +347,11 @@ interface Message {
   content: string | ContentBlock[] // 字符串简写或结构化块
   name?: string                    // 显示名称 / 工具函数名称
   toolCalls?: ToolCall[]           // 助手的工具调用
-  toolCallId?: string              // 将工具响应链接到其调用
+  /**
+   * 将工具响应链接到其调用。
+   * 当 role 为 'tool' 时，此字段为必填。
+   */
+  toolCallId?: string
 
   // ── 渲染控制 (顶层) ──
   templateFormat?: string          // 默认: 'jinja2'
@@ -345,10 +364,11 @@ type ChatRole = 'user' | 'assistant' | 'system' | 'tool' | (string & {})
 ```
 
 ### 决策
+
 - 模型交互字段位于顶层——每个提供者适配器直接读取它们
 - metadata 是 Record<string, any> —— 不同层在不协调的情况下添加自己的键
 - 在针对远程 API 调用进行序列化时，完全剥离 metadata
-- templateFormat 属于协议层，因为模板渲染是一个横切关注点
+- `templateFormat` 属于协议层，优先级为：**消息级 > 请求级 > 模型配置级**
 
 ## 工具调用
 <!-- id: message-tools -->
@@ -407,7 +427,12 @@ interface AIRequest {
    */
   model: string
 
-  // ── 输入 (互斥) ──
+  /**
+   * 唯一请求 ID，用于追踪和调试。
+   */
+  requestId?: string
+
+  // ── 输入 (互斥，由运行时校验) ──
   messages?: Message[]                // 对话式
   input?: string | ContentBlock[]     // 非对话式
 
@@ -427,6 +452,7 @@ interface AIRequest {
 ```
 
 ### 备注
+
 - tools/toolChoice 在非对话 (input) 模式下被忽略
 - options 是完全透明的——temperature, top_p, steps, voice, seed 等
 - 如果 stream=true 但不支持，提供者**必须**抛出错误 (没有静默降级)
@@ -534,27 +560,29 @@ interface UsageInfo {
 
 流式传输是一个**传输层关注点**。协议层仅声明意图 (`stream: true`) 和块格式。流式传输如何实现 (SSE, WebSocket, gRPC, 本地回调) 是提供者的决定。
 
-**最后一个块**携带摘要信息 (finishReason, usage) —— 遵循 OpenAI 约定。
+### 流生命周期
 
-如果请求设置 `stream: true` 但提供者不支持流式传输，提供者**必须**抛出 `UNSUPPORTED_FEATURE` 错误 (代码 604)。不允许静默降级——调用者的代码是为流式传输构建的，在非流式响应上会中断。
+- **成功完成**: `AsyncIterable` 正常结束。最后一个块必须包含 `stop: true`，且通常包含 `finishReason`（如 `'stop'` 或 `'length'`）和 `usage`。
+- **用户取消**: 通过 `AbortSignal` 触发。建议提供者抛出 `AIError(ABORTED)`，且最后一个块应包含 `stop: true` 和 `finishReason: 'abort'`。
+- **提供者错误**: `AsyncIterable` 抛出异常。异常应符合 `AIError` 类型。如果此时已输出了部分内容，建议最后一个块包含 `stop: true` 和 `finishReason: 'error'`。
+- **反向适配**: 如果提供者仅支持流式模式而请求为非流式，提供者应在内部缓冲所有块并返回单一的 `AIResponse`。
+
+如果请求设置 `stream: true` 但提供者不支持流式传输，提供者**必须**抛出 `UNSUPPORTED_FEATURE` 错误 (代码 604)。不允许静默降级。
 
 ```typescript
 interface AIResponseChunk {
   type: string            // 'text' | 'thinking' | 'image' | 'audio' | ...
 
+  // ── 状态控制 ──
+  /**
+   * 标记是否为最后一个块。
+   * 最后一个块必须包含 stop: true。
+   */
+  stop?: boolean
+
   // ── 文本/思考增量 ──
   delta?: string          // 增量文本
-
-  // ── 二进制增量 ──
-  data?: ArrayBuffer      // 二进制块 (图像/音频/视频)
-
-  // ── 图像渐进式渲染 ──
-  step?: number           // 当前扩散步数
-  totalSteps?: number     // 总步数 (来自请求选项或模型默认)
-
-  // ── 多输出 ──
-  index?: number          // 并行输出索引 (n=3 → 0,1,2)
-
+  // ... (略)
   // ── 仅最后一个块 ──
   finishReason?: FinishReason
   usage?: UsageInfo
@@ -578,11 +606,17 @@ interface AIProvider {
   id: string       // 唯一 ID (用于 URI 方案)
   name: string     // 人类可读名称
 
-  // 能力声明
+  /**
+   * 返回提供者的总能力范围。
+   * 这代表了该提供者理论上能支持的所有模态和特性的并集。
+   */
   capabilities(): ModelCapability[]
 
-  // 模型发现
-  listModels(): Promise<ModelInfo[]>
+  /**
+   * 获取支持的模型清单。
+   * @param ids 可选的模型 ID 或 ID 数组，用于过滤结果。
+   */
+  listModels(ids?: string | string[]): Promise<ModelInfo[]>
 
   // 统一调用 — 单一入口点
   invoke(req: AIRequest & { stream: true }): Promise<AsyncIterable<AIResponseChunk>>
@@ -616,6 +650,7 @@ interface RemoteProviderConfig {
   apiUrl: string
   apiKey?: string
   headers?: Record<string, string>
+  timeout?: number                     // 请求超时时间 (毫秒)
 }
 
 interface LocalProviderConfig {
@@ -627,6 +662,7 @@ interface LocalProviderConfig {
 ```
 
 ### 决策
+
 - engineOptions 中的提供者特定选项是透明的——协议不解释它们
 - 未知参数被提供者静默忽略
 - 协议层没有白名单/黑名单强制执行
@@ -658,6 +694,7 @@ interface LocalProviderConfig {
 4. **引擎默认值 (Engine Defaults)**: 底层推理引擎（如 `llama.cpp`）自身的缺省值。
 
 ### 备注
+
 - **配置文件内部优先级**: 在计算伴生配置或系统配置时，其内部也存在层级覆盖（由高到低）：**版本变体 (Variant) > 当前配置基础 (Base) > 继承配置 (Inherited)**。
 - 协议层不执行此合并——这是提供者/引擎的责任。
 - 此链确保用户意图始终获胜，在未指定时使用合理的默认值。
@@ -727,6 +764,7 @@ type ModelNameRule = string | RegExp | ((name: string) => boolean)
 ```
 
 ### 备注
+
 - 在模型配置文件中，模式使用 !re YAML 标记表示 RegExp: !re /pattern/flags
 - modelPattern 中的 "@" 键用作默认/回退规则
 - 模式按顺序评估；第一个匹配获胜
@@ -767,7 +805,7 @@ const AIErrorCodes = {
   TIMEOUT:                  408,  // 请求超时
   CONFLICT:                 409,  // 资源冲突 (例如, 模型加载)
   RATE_LIMITED:              429,  // 请求过多
-  CONTENT_FILTERED:         451,  // 触发内容审核
+  CONTENT_FILTERED:         451,  // 触发内容审核 (注：此处泛指所有安全过滤，不仅限法律原因)
   INTERNAL_ERROR:           500,  // 提供者内部错误
   NOT_IMPLEMENTED:          501,  // 特性未实现
   SERVICE_UNAVAILABLE:      503,  // 服务暂时不可用
@@ -784,7 +822,8 @@ const AIErrorCodes = {
 ```
 
 ### 决策
-- 代码 400-503 重用 HTTP 语义——开发人员可以立即识别它们
+
+- 代码 400-503 重用 HTTP 语义——开发人员可以立即识别它们；451 被泛化用于一切内容审核场景
 - 代码 600+ 是 AI 特定的扩展
 - 远程提供者将原始 HTTP 状态映射到 status 字段，将统一代码映射到 code 字段
 - 提供者可以使用自定义代码 (700+); 未知代码被调用者视为 INTERNAL_ERROR
@@ -792,10 +831,10 @@ const AIErrorCodes = {
 ## AIError 类型
 <!-- id: errors-type -->
 
-标准错误类型扩展了 JavaScript Error：
+标准错误类型扩展了 JavaScript Error (在实现中应当为 class 以便 instanceof 检查)：
 
 ```typescript
-interface AIError extends Error {
+class AIError extends Error {
   code: number           // AIErrorCodes 值或自定义
   status?: number        // 原始 HTTP 状态 (远程提供者)
   provider?: string      // 哪个提供者抛出了此错误
@@ -901,10 +940,13 @@ modelPattern:             # ← 自己的模式 (不继承父模式)
 ```
 
 ### 决策
-- extends 创建原型链——子级继承所有父级字段
-- 子级字段在顶层覆盖父级字段
-- modelPattern **不**合并——子级完全替换父级模式
-- 版本变体**不**继承——每个配置定义自己的
+
+- **继承链**: `extends` 创建原型链——子级继承所有父级字段。
+- **合并规则**:
+  - **浅合并 (Override)**: 基础类型字段（`string`, `boolean`, `template` 等）直接覆盖。
+  - **深合并 (Deep Merge)**: 字典类字段（`prompt`, `parameters`）执行深合并。
+  - **不继承/合并**: `modelPattern` 和 `version` 不继承也不合并，子级必须定义自己的模式。
+- 此链确保用户意图始终获胜，在未指定时使用合理的默认值。
 
 ## 模型匹配流程
 <!-- id: model-config-matching -->
@@ -993,6 +1035,7 @@ version:
 ```
 
 ### 备注
+
 - 引擎使用 thinkTag 构建用于流解析的状态机
 - 当 mode=off 时，blankThink 被注入到 prompt 中以抑制思考
 - assistant_suffix 自定义 (例如, "\\n<think>") 强制开始思考

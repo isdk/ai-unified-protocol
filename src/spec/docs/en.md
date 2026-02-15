@@ -6,7 +6,12 @@
 
 This specification defines a unified protocol for interacting with AI models across all modalities — text, image, audio, video, and embeddings — regardless of whether the model runs locally or via a remote API.
 
-**Core Insight**: Every AI model is fundamentally an \`Input → Output\` function. All differences between model types (chat, vision, TTS, drawing, etc.) reduce to:
+**Protocol Version**: `1.0.1`
+
+**Core Insight**: Every AI model
+
+ is fundamentally an `Input → Output` function. All differences between model types (chat, vision, TTS, drawing, etc.) reduce to:
+
 - What input modalities the model accepts
 - What output modalities it produces
 - What additional features it supports (streaming, multi-turn, tool calling, etc.)
@@ -14,6 +19,7 @@ This specification defines a unified protocol for interacting with AI models acr
 By modeling these three dimensions explicitly, the protocol eliminates the need for per-type interfaces.
 
 ### Decisions
+
 - All model types share the same request/response protocol
 - Differences are expressed via capability declarations, not separate interfaces
 - Provider-specific parameters are passed through transparently — the protocol does not interpret them
@@ -87,10 +93,17 @@ The system uses concise URI formats for model and endpoint positioning:
 A **Modality** represents a type of content that can flow into or out of a model. The protocol defines five standard modalities:
 
 ```typescript
-type Modality = 'text' | 'image' | 'audio' | 'video' | 'embedding'
+type Modality =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'embedding'
+  | (string & {})     // Allows extending new modalities (e.g. '3d_model', 'midi')
 ```
 
 ### Notes
+
 - Modalities describe the nature of data, not the format (e.g., "image" covers PNG, JPEG, WebP, etc.)
 - New modalities can be added as the ecosystem evolves (e.g., "3d_model", "midi")
 
@@ -112,6 +125,7 @@ type Feature =
 ```
 
 ### Notes
+
 - Features are extensible — providers can introduce custom features
 - Features describe what a model CAN do, not what it MUST do
 
@@ -156,6 +170,7 @@ matchesAlias(model, 'chat', { requireFeatures: ['multi_turn'] })
 ```
 
 ### Decisions
+
 - A completion-only text→text model IS a "chat" type (matches modalities), but lacks multi_turn feature
 - GPT-4o matches both "chat" and "vision" aliases (superset matching)
 - Application layer checks features separately to determine UI presentation
@@ -169,6 +184,7 @@ matchesAlias(model, 'chat', { requireFeatures: ['multi_turn'] })
 All input and output data flows through **ContentBlock** — a tagged union with \`type\` discriminator. The \`type\` field is \`string\` (not enum) to allow provider extensions.
 
 Content can appear in two forms:
+
 - **String shorthand**: \`"Hello world"\` — treated as \`[{ type: 'text', text: 'Hello world' }]\`
 - **ContentBlock array**: \`[{ type: 'text', text: '...' }, { type: 'image', url: '...' }]\`
 
@@ -186,6 +202,7 @@ type ContentBlock =
 ```
 
 ### Decisions
+
 - type is string, not enum — providers can extend freely
 - Data can be inline (base64/ArrayBuffer) or by reference (URL)
 - Unknown block types should be handled gracefully (JSON display or skip)
@@ -310,6 +327,7 @@ When a model supports multi-mode switching and uses asymmetric delimiters (no ex
 3. **Boundary Handling**: In `THINKING` state, once an `answerTag` is matched, the thinking block must be immediately terminated and switched to the body block, even if no closing `thinkTag` was encountered.
 
 ### Notes
+
 - Provider parses raw stream using a state machine: NORMAL → encounter start tag → THINKING → encounter end tag → NORMAL
 - In streaming mode, thinking chunks use { type: "thinking", delta: "..." } and content chunks use { type: "text", delta: "..." }
 - Application layer only sees clean, separated blocks — no parsing needed
@@ -331,7 +349,11 @@ interface Message {
   content: string | ContentBlock[] // String shorthand or structured blocks
   name?: string                    // Display name / tool function name
   toolCalls?: ToolCall[]           // Assistant's tool invocations
-  toolCallId?: string              // Links tool response to its call
+  /**
+   * Links tool response to its call.
+   * Required when role is 'tool'.
+   */
+  toolCallId?: string
 
   // ── Rendering control (top-level) ──
   templateFormat?: string          // Default: 'jinja2'
@@ -344,10 +366,11 @@ type ChatRole = 'user' | 'assistant' | 'system' | 'tool' | (string & {})
 ```
 
 ### Decisions
+
 - Model interaction fields are top-level — every provider adapter reads them directly
 - metadata is Record<string, any> — different layers add their own keys without coordination
 - When serializing for remote API calls, strip metadata entirely
-- templateFormat is protocol-layer because template rendering is a cross-cutting concern
+- `templateFormat` belongs to the protocol layer, with priority: **Message > Request > ModelConfig**
 
 ## Tool Calling
 <!-- id: message-tools -->
@@ -414,7 +437,12 @@ interface AIRequest {
    */
   model: string
 
-  // ── Input (mutually exclusive) ──
+  /**
+   * Unique request identifier for tracing and debugging.
+   */
+  requestId?: string
+
+  // ── Input (mutually exclusive, validated at runtime) ──
   messages?: Message[]                // Conversational
   input?: string | ContentBlock[]     // Non-conversational
 
@@ -434,6 +462,7 @@ interface AIRequest {
 ```
 
 ### Notes
+
 - tools/toolChoice are ignored in non-conversational (input) mode
 - options is fully transparent — temperature, top_p, steps, voice, seed, etc.
 - If stream=true but unsupported, provider MUST throw error (no silent degradation)
@@ -549,6 +578,13 @@ If a request sets \`stream: true\` but the provider does not support streaming, 
 interface AIResponseChunk {
   type: string            // 'text' | 'thinking' | 'image' | 'audio' | ...
 
+  // ── Status Control ──
+  /**
+   * Indicates if this is the last chunk.
+   * The last chunk must contain stop: true.
+   */
+  stop?: boolean
+
   // ── Text/thinking increments ──
   delta?: string          // Incremental text
 
@@ -602,11 +638,17 @@ interface AIProvider {
   id: string       // Unique ID (used in URI scheme)
   name: string     // Human-readable name
 
-  // Capability declaration
+  /**
+   * Returns the total range of capabilities for this provider.
+   * This represents the union of all modalities and features the provider can theoretically support.
+   */
   capabilities(): ModelCapability[]
 
-  // Model discovery
-  listModels(): Promise<ModelInfo[]>
+  /**
+   * List available models.
+   * @param ids Optional model ID or array of IDs to filter.
+   */
+  listModels(ids?: string | string[]): Promise<ModelInfo[]>
 
   // Unified invocation — single entry point
   invoke(req: AIRequest & { stream: true }): Promise<AsyncIterable<AIResponseChunk>>
@@ -640,6 +682,7 @@ interface RemoteProviderConfig {
   apiUrl: string
   apiKey?: string
   headers?: Record<string, string>
+  timeout?: number                     // Request timeout in milliseconds
 }
 
 interface LocalProviderConfig {
@@ -651,6 +694,7 @@ interface LocalProviderConfig {
 ```
 
 ### Decisions
+
 - Provider-specific options in engineOptions are transparent — protocol does not interpret them
 - Unknown parameters are silently ignored by the provider
 - No whitelist/blacklist enforcement at protocol level
@@ -682,6 +726,7 @@ For local providers, parameters are resolved through a priority chain. Higher-pr
 4. **Engine Defaults**: Default values of the underlying inference engine (Lowest priority).
 
 ### Notes
+
 - **Internal Configuration Priority**: When resolving a Sidecar or System configuration, an internal hierarchy also applies (from high to low): **Version Variant > Base Config > Inherited Config**.
 - The protocol layer does not perform this merging — it is the provider/engine's responsibility.
 - This chain ensures user intent always wins, with sensible defaults when not specified.
@@ -752,6 +797,7 @@ type ModelNameRule = string | RegExp | ((name: string) => boolean)
 ```
 
 ### Notes
+
 - In model config files, patterns use !re YAML tag for RegExp: !re /pattern/flags
 - The "@" key in modelPattern serves as the default/fallback rule
 - Patterns are evaluated in order; first match wins
@@ -791,9 +837,10 @@ const AIErrorCodes = {
   MODEL_NOT_FOUND:          404,  // Model does not exist
   TIMEOUT:                  408,  // Request timed out
   CONFLICT:                 409,  // Resource conflict (e.g., model loading)
-  RATE_LIMITED:              429,  // Too many requests
-  CONTENT_FILTERED:         451,  // Content moderation triggered
-  INTERNAL_ERROR:           500,  // Provider internal error
+    RATE_LIMITED:              429,  // Too many requests
+    CONTENT_FILTERED:         451,  // Content moderation triggered (generalized for all safety/policy filters)
+    INTERNAL_ERROR:             500,  // Provider internal error
+
   NOT_IMPLEMENTED:          501,  // Feature not implemented
   SERVICE_UNAVAILABLE:      503,  // Service temporarily unavailable
 
@@ -809,6 +856,7 @@ const AIErrorCodes = {
 ```
 
 ### Decisions
+
 - Codes 400-503 reuse HTTP semantics — developers recognize them instantly
 - Codes 600+ are AI-specific extensions
 - Remote providers map original HTTP status to the status field, unified code to the code field
@@ -817,10 +865,10 @@ const AIErrorCodes = {
 ## AIError Type
 <!-- id: errors-type -->
 
-The standard error type extends JavaScript Error:
+The standard error type extends JavaScript Error (should be implemented as a class for instanceof checks):
 
 ```typescript
-interface AIError extends Error {
+class AIError extends Error {
   code: number           // AIErrorCodes value or custom
   status?: number        // Original HTTP status (remote providers)
   provider?: string      // Which provider threw this
@@ -926,10 +974,13 @@ modelPattern:             # ← Own patterns (does NOT inherit parent patterns)
 ```
 
 ### Decisions
-- extends creates a prototype chain — child inherits all parent fields
-- Child fields override parent fields at the top level
-- modelPattern is NOT merged — child completely replaces parent patterns
-- version variants are NOT inherited — each config defines its own
+
+- **Inheritance Chain**: `extends` creates a prototype chain — child inherits all parent fields.
+- **Merge Rules**:
+  - **Override**: Base-type fields (`string`, `boolean`, `template`, etc.) directly override.
+  - **Deep Merge**: Dictionary fields (`prompt`, `parameters`) are deeply merged.
+  - **No Inheritance/Merge**: `modelPattern` and `version` are neither inherited nor merged; child must define its own patterns.
+- This chain ensures user intent always wins, with sensible defaults used when unspecified.
 
 ## Model Matching Flow
 <!-- id: model-config-matching -->
@@ -1018,6 +1069,7 @@ version:
 ```
 
 ### Notes
+
 - The engine uses thinkTag to build a state machine for stream parsing
 - blankThink is injected into the prompt to suppress thinking when mode=off
 - assistant_suffix customization (e.g., "\\n<think>") forces thinking to start

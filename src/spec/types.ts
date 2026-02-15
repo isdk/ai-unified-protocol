@@ -1,5 +1,5 @@
 // ============================================================================
-// AI Unified Protocol Specification v1.0
+// AI Unified Protocol Specification v1.0.1
 // Complete TypeScript Type Definitions
 // ============================================================================
 
@@ -9,7 +9,13 @@
  * Content modalities that AI models can consume or produce.
  * Extensible: providers may introduce custom modalities via string.
  */
-export type Modality = 'text' | 'image' | 'audio' | 'video' | 'embedding'
+export type Modality =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'embedding'
+  | (string & {})
 
 /**
  * Feature flags describing additional capabilities beyond I/O modalities.
@@ -209,7 +215,10 @@ export interface Message {
   /** Tool calls made by assistant (only when role='assistant') */
   toolCalls?: ToolCall[]
 
-  /** ID of the tool call this message responds to (only when role='tool') */
+  /**
+   * ID of the tool call this message responds to.
+   * Required when role='tool'.
+   */
   toolCallId?: string
 
   /** Template format for content interpolation. Default: 'jinja2' */
@@ -278,6 +287,11 @@ export interface AIRequest {
    * If no provider prefix, the router resolves via registered providers.
    */
   model: string
+
+  /**
+   * Unique request identifier for tracing and debugging.
+   */
+  requestId?: string
 
   // ── Input (mutually exclusive) ──
 
@@ -366,6 +380,12 @@ export interface AIResponseChunk {
   /** Content type of this chunk */
   type: string  // 'text' | 'thinking' | 'image' | 'audio' | ...
 
+  /**
+   * Whether generation has stopped.
+   * The last chunk MUST have stop: true.
+   */
+  stop?: boolean
+
   // ── Text/thinking delta ──
   /** Incremental text content */
   delta?: string
@@ -425,11 +445,14 @@ export interface AIProvider {
   /** Human-readable name */
   name: string
 
-  /** Declare what this provider can do */
+  /** Declare what this provider can do (total capability range) */
   capabilities(): ModelCapability[]
 
-  /** List available models */
-  listModels(): Promise<ModelInfo[]>
+  /**
+   * List available models.
+   * @param ids Optional model ID or array of IDs to filter.
+   */
+  listModels(ids?: string | string[]): Promise<ModelInfo[]>
 
   /**
    * Invoke the model.
@@ -467,6 +490,9 @@ export interface RemoteProviderConfig {
 
   /** Custom HTTP headers or transport-level metadata */
   headers?: Record<string, string>
+
+  /** Request timeout in milliseconds */
+  timeout?: number
 
   /**
    * Transport-level URL for the provider connection.
@@ -537,7 +563,7 @@ export const AIErrorCodes = {
   TIMEOUT:                    408,
   CONFLICT:                   409,
   RATE_LIMITED:               429,
-  CONTENT_FILTERED:           451,
+  CONTENT_FILTERED:           451,  // Content filter triggered (generalized for all safety/policy filters)
   INTERNAL_ERROR:             500,
   NOT_IMPLEMENTED:            501,
   SERVICE_UNAVAILABLE:        503,
@@ -556,10 +582,11 @@ export type AIErrorCode = typeof AIErrorCodes[keyof typeof AIErrorCodes] | numbe
 
 /**
  * Standard AI error type.
+ * Implementations should be a class to support instanceof checks.
  */
-export interface AIError extends Error {
+export class AIError extends Error {
   /** Numeric error code (see AIErrorCodes) */
-  code: AIErrorCode
+  code!: AIErrorCode
   /** Original HTTP status (for remote providers) */
   status?: number
   /** Which provider threw this error */
